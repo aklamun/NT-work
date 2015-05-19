@@ -1,0 +1,284 @@
+\documentclass{amsart}
+
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{amssymb}
+\usepackage{amsfonts}
+\usepackage{hyperref}
+\usepackage{mathrsfs}
+\usepackage[line,color,poly,all]{xy}
+\usepackage{graphicx,hyperref,url,xy,amssymb,booktabs, verbatim}
+\usepackage[noadjust]{cite}
+\usepackage{xspace}
+
+\newtheorem{theorem}{Theorem}[subsection]
+\newtheorem{cor}[subsubsection]{Corollary}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{prop}{Proposition} [subsection]
+\newtheorem{conj}{Conjecture} [subsection]
+\newtheorem*{corollary}{Corollary}
+\newtheorem*{modularity}{Modularity Conjecture}
+\theoremstyle{definition}
+\newtheorem*{definition}{Definition}
+\newtheorem{example} [theorem] {Example}
+\newtheorem{remark} [theorem] {Remark}
+
+
+
+
+% User-defined macros.  Add, subtract, modify as you wish.
+
+\newcommand{\Q}{\mathbb{Q}}
+\newcommand{\n}{\mathfrak{n}}
+\newcommand{\cN}{\mathcal{N}}
+\newcommand{\A}{\mathbb{A}}
+\newcommand{\PP}{\mathbb{P}}
+\newcommand{\C}{\mathcal{C}}
+\newcommand{\Fp}{\mathbb{F}_p}
+\newcommand{\OF}{\mathcal{O}_F}
+\newcommand{\OK}{\mathcal{O}_K}
+\newcommand{\E}{\mathcal{E}}
+\newcommand{\ap}{a_{\mathfrak{p}}}
+\newcommand{\p}{\mathfrak{p}}
+\newcommand{\N}{\mathfrak{N}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\OKS}{\mathcal{O}_{K,\mathcal{S}}}
+\newcommand{\q}{\mathfrak{q}}
+
+
+% User-defined math operators.  Add, subtract, modify as you wish.
+
+\DeclareMathOperator{\rad}{rad}
+\DeclareMathOperator{\diam}{diam}
+\DeclareMathOperator{\divop}{div}
+
+
+\begin{document}
+
+\title{Enumerating Isogeny Classes Using Billerey's Algorithm}
+
+\author{Ariah Klages-Mundt}
+
+\address{Department of Mathematics\\ 
+Amherst College\\Amherst, MA 01002}
+
+\email{aklagesmundt12@alumni.amherst.edu}
+
+\renewcommand{\setminus}{\smallsetminus}
+
+
+
+
+\maketitle
+
+
+
+
+\section{Enumerating the curves in an isogeny class} \label{section 4}
+
+Given an elliptic curve $E/F$, we would like to identify all isomorphism classes of elliptic curves $E'/F$ that are isogenous to $E$ via an isogeny defined over $F$. Recall that two elliptic curves in an isogeny class are linked by a chain of prime degree isogenies --- in particular, to enumerate an isogeny class we need to find all isogenies of prime degree, of which there are finitely many for curves that do not admit CM over the given number field. Over $\Q$, there is an algorithmic solution to this problem described in \cite{cremona97} that is based on the following:
+
+\begin{enumerate}
+\item Mazur's theorem that states that if $\psi: E \rightarrow E'$ is a $\Q$-rational isogeny of prime degree, then $deg \ \psi \leq 163$.
+\item V{\'e}lu's formulas, which provide an explicit way to enumerate all prime degree isogenies with a given domain $E$ (see \cite{silverman92} III Prop.~4.12 for an important result and \cite{cremona97} III Section 3.8 for a discussion of these formulas).
+\end{enumerate}
+
+V{\'e}lu's formulas are valid for any number field (in fact, they are valid for a field of any characteristic) and are implemented in {\tt Sage}, but there is currently no generalization of Mazur's theorem that gives us an explicit bound on the possible prime degree isogenies defined over a general number field.
+
+Since we are interested in specific isogeny classes, we solve this problem by taking a less general perspective: we determine which prime degree isogenies are possible for a specific isogeny class using the following well-known result.
+
+\begin{theorem} \label{Galois reps}
+Let $E$ be an elliptic curve over a number field $K$. For each prime number $\ell \in \Z$, let
+\begin{equation}
+\rho_{E,\ell}: Gal(\overline{\Q}/K) \rightarrow GL(E[\ell]) \cong GL_2(\Z/\ell\Z)
+\nonumber \end{equation}
+be the associated Galois representation on $\ell$-torsion points, where $E[\ell]$ is the set (actually group) of $\ell$-torsion points in $E(\overline{K})$. There exists an isogeny $E \rightarrow E'$ defined over $K$ of prime degree $\ell$ if and only if $\rho_{E,\ell}$ is reducible over $\mathbb{F}_\ell$. In particular, if $\rho_{E,\ell}$ is irreducible (over the algebraic closure of $\mathbb{F}_\ell$), then there can be no isogenies $E \rightarrow E'$ of prime degree $\ell$.
+\end{theorem}
+
+In this section, we describe our implementation of an algorithm described in \cite{billerey:isogenies} that outputs a provably finite list of primes $p$ such that a given elliptic curve $E$ over a number field $K$ might have a $p$-isogeny. For simplicity, we will work solely with the case that $[K:\Q]$ is odd, although there is a similar algorithm that can deal with the even case. We first develop the necessary machinery in \ref{sec:isogenies1} and then describe the implementation of algorithm in \ref{sec:isogenies2}.
+
+\subsection{Definitions and machinery} \label{sec:isogenies1}
+
+Proofs of all statements in this section can be found in \cite{billerey:isogenies}.
+
+\begin{definition}
+Let $A$ be an integral domain with field of fractions $L$ and $\overline{L}$ an algebraic closure of $L$. We define $M_A$ to be the subset of $A[X]$ of all monic polynomials that do not vanish at $0$.
+\end{definition}
+
+For an integral domain $A$, we wish to define a commutative monoid operation $*$ on a subset of $A[X]$.
+
+\begin{lemma} The operation $M_A \times M_A \rightarrow A[X]$ given by
+\begin{equation}(P,Q) \mapsto (P*Q)(X) = Res_Z(P(Z),Q(X/Z)Z^{degQ}), \nonumber
+\end{equation}
+where $Res_Z$ is the resultant with respect to Z, has an image contained in $M_A$. It defines an act of a commutative monoid on $M_A$ with neutral element $\psi_A(X) = X-1$. Moreover, if $P,Q \in M_A$ are written
+\begin{equation}
+P(X) = \prod_{i=1}^{n}(X-\alpha_i) \ and \ Q(X) = \prod_{j=1}^{m}(X-\beta_j) \nonumber
+\end{equation}
+then in $\overline{L}[X]$ we have
+\begin{equation}
+(P*Q)(X) = \prod_{1 \leq i \leq n, \ 1 \leq j \leq m}(X-\alpha_i\beta_j). \nonumber
+\end{equation}
+In particular,
+\begin{equation}
+(P*Q)(0) = (-1)^{degP \cdot degQ}P(0)^{degQ}Q(0)^{degP}. \nonumber
+\end{equation}
+\end{lemma}
+
+\begin{lemma}
+Let $r \geq 1$ and $P \in M_A$. Then there exists a unique polynomial $P^{(r)} \in M_A$ such that
+$P^{(r)}(X^r) = (P*\Psi_r)(X)$ where $\Psi_r(X) = X^r -1$. The mapping $P \mapsto P^{(r)}$ is a monoid morphism for the operation $*$. Moreover, if $P \in M_A$ factors on $\overline{L}$ to the form
+\begin{equation}
+P(X) = \prod_{i=q}^{n} (X-\alpha_i), \ then \ P^{(r)}(X) = \prod_{i=1}^{n}(X-\alpha_i^r). \nonumber
+\end{equation}
+\end{lemma}
+
+Let $K$ be a number field and fix an elliptic curve $E/K$ that does not admit CM over $K$. Let $\ell$ be a prime number such that $E$ has good reduction at every prime ideal of $\OK$ dividing
+\begin{equation}
+\ell \OK = \prod_{\q_i | \ell} \q_i^{v_{\q_i}(\ell)}, \nonumber
+\end{equation}
+where the right-hand side is the decomposition product of prime ideals of $\OK$ --- in particular, $v_{\q_i}(\ell)$ is the ramification index of prime $\q_i$ in $\ell\OK$. By abuse of language, we say that $E$ has good reduction at $\ell$. In this case, we associate with $\ell$ the polynomial $P_\ell^*$ with integer coefficients
+\begin{equation}
+P_\ell^* = P_{\q_1}^{(12v_{\q_1}(\ell))}*\ldots*P_{\q_s}^{(12v_{\q_s}(\ell))} \in \Z[X] \nonumber
+\end{equation}
+for $\q_i$ such that $\q_i | \ell$, and $P_{\q}$ is defined in the following way:
+
+Suppose $E$ has good reduction at $\q$. Then we define \label{not:minimal Frob}
+\begin{equation}
+P_\q(X) = X^2 - a_\q X + N(\q) \in \Z[X] \nonumber
+\end{equation}
+where $N(\q) = \#\OK/\q$ and $a_\q = N(\q) + 1 - \#E(\OK/\q)$.
+
+We then define the integer $B_\ell$ as follows: \label{not:Bl}
+\begin{equation}
+B_\ell = \prod_{k=0}^{[\frac{d}{2}]} P_\ell^*(\ell^{12k}) \nonumber
+\end{equation}
+where $d$ is the degree of $K/\Q$, $[\frac{d}{2}]$ denotes the integer part of $\frac{d}{2}$, and $P_\ell^*$ is evaluated at $\ell^{12k}$.
+
+With this machinery, we have the following theorem:
+
+\begin{theorem}
+Let $p$ be a reducible prime for $E/K$ --- i.e., a prime such that $E$ admits a $p$-isogeny defined over $K$. Then one of the following is true:
+\\ \emph{(1)} $p$ divides $6 \Delta_K N_{K/\Q}(\Delta_E)$
+\\ \emph{(2)} For all primes $\ell$, the number $B_\ell$ is divisible by $p$ (if $K = \Q$, consider only $\ell \neq p$).
+\end{theorem}
+
+\begin{remark}
+The above criterion is effectively useful only if not all of the $B_\ell$'s are zero. Corollary 0.2 in \cite{billerey:isogenies} shows that this is the case when the degree $d$ of the extension of $K/\Q$ is odd since then all roots of $P_\ell^*$ have absolute value $\ell^{6d}$ and $12k \neq 6d$.
+\end{remark}
+
+
+
+\subsection{The algorithm} \label{sec:isogenies2}
+
+Let $K$ be a number field of odd degree and $E/K$ an elliptic curve without complex multiplication over $K$ given by a Weierstrass equation with coefficients in $\OK$ --- these are the inputs to the algorithm. The following algorithm then outputs a provably finite set of primes containing $Red(E/K)$, the set of primes $p$ such that $E$ has a $p$-isogeny (i.e., such that the Galois representation is reducible --- see Theorem~\ref{Galois reps}).
+
+\begin{enumerate}
+\item Compute the set $S_1$ of prime divisors of $6 \Delta_K N_{K/\Q}(\Delta_E)$.
+\item Let $\ell_0$ be the smallest prime number not in $S_1$. The curve $E$ has good reduction at $\ell_0$. If $B_{\ell_0} \neq 0$, proceed to the next step. Otherwise, reiterate this step with the smallest prime number $\ell_1$ not in $S_1$ and such that $\ell_1 > \ell_0$ etc.~until we have some $B_\ell \neq 0$.
+\item We now have a non-zero integer $B_\ell$. For greater efficiency, we can reiterate step 2 to obtain more such $B_\ell \neq 0$. We then define $S_2$ to be the set of prime factors of the greatest common divisor of the $B_\ell$'s we have obtained and define $S = S_1 \cup S_2$.
+\item The set $S$ then contains $Red(E/K)$, although it may contain other primes. We can eliminate some of these primes by calculating polynomials $P_\q$ for some prime ideals $\q$ of good reduction --- in particular, if $P_\q$ is irreducible modulo $p$ (with $\q$ not dividing~$p$), then $p \notin Red(E/K)$. The subset $S'$ of $S$ of prime numbers remaining is then usually small.
+\end{enumerate}
+
+Let $K$ be a cubic number field. Note that CM isogenies are defined over imaginary quadratic fields. Since, by the Tower Theorem, $K$ contains no such subfield, there are no CM isogenies defined over $K$. Therefore, by using this algorithm in combination with V{\'e}lu's formulas, we are able to enumerate any isogeny class of elliptic curves over one of our number fields given that we have already found a representative of the said isogeny class using methods from Section~\ref{section 3}.
+
+
+
+
+\begin{thebibliography}{9}
+
+\bibitem{billerey:isogenies}
+	Nicolas Billerey,
+	\emph{Crit\`eres d'irr\'eductibilit\'e pour les repr\'esentations des courbes elliptiques},
+	Int. J. Number Theory \textbf{7} (2011), no. 4, 1001-1032,
+	\url{http://arxiv.org/abs/0908.1084}.
+	
+\bibitem{bdkm+12}
+	Jon Bober, Alyson Deines, Ariah Klages-Mundt, Benjamin LeVeque, R.\thinspace{}Andrew Ohana, Ashwath Rabindranath, Paul Sharaba, and William Stein,
+	\emph{A database of elliptic curves over $\Q(\sqrt{5})$ --- first report},
+	to appear in Proceedings of Algorithmic Number Theory Symposium X (2012),
+	\url{http://arxiv.org/abs/1202.6612}.
+
+\bibitem{magma}
+	W.\thinspace{}Bosma, J.\thinspace{}Cannon, and C.\thinspace{}Playoust,
+	\emph{The Magma algebra system. I. The user language},
+	J. Symbolic Comput. \textbf{24} (1997), no. 3-4, 235-265,
+	Computational algebra and number theory (London, 1993).
+
+\bibitem{bcdt01}
+	C.\thinspace{}Breuil, B.\thinspace{}Condrad, F.\thinspace{}Diamond, and R.\thinspace{}Taylor,
+	\emph{On the modularity of elliptic curves over $\Q$: wild 3-adic exercises},
+	J. Amer. Math. Soc. \textbf{14} (2001), no. 4, 843-939,
+	\url{http://math.stanford.edu/~conrad/papers/tswfinal.pdf}.
+
+\bibitem{cremona97}
+	J.\thinspace{}E.\thinspace{}Cremona,
+	\emph{Algorithms for Modular Elliptic Curves},
+	Cambridge University Press, Cambridge, 1997,
+	Second Edition,
+	\url{http://www.warwick.ac.uk/~masgaj/book/fulltext/}.
+
+\bibitem{cremona-lingham07}
+	J.\thinspace{}E.\thinspace{}Cremona, and M.\thinspace{}P.\thinspace{}Lingham,
+	\emph{Finding all elliptic curves with good reduction outside a given set of primes},
+	Experiment. Math. \textbf{16} (2007), no. 3, 303-312,
+	\url{http://projecteuclid.org/euclid.em/1204928531}.
+
+\bibitem{ghy12}
+	Paul E.\thinspace{}Gunnells, Farshid Hajir, and Dan Yasaki,
+	\emph{Modular forms and elliptic curves over the field of fifth roots of unity},
+	to appear in Experiment. Math. (2012),
+	\url{http://arxiv.org/abs/1005.2752}.
+
+\bibitem{gunnells-yasaki12}
+	Paul E.\thinspace{}Gunnells and Dan Yasaki,
+	\emph{Modular forms and elliptic curves over the cubic field of discriminant $-23$},
+	submitted 2012,
+	\url{http://arxiv.org/abs/1201.4132v1}.
+
+\bibitem{katz81}
+	N.\thinspace{}M.\thinspace{}Katz,
+	\emph{Galois properties of torsion points on abelian varieties},
+	Invent. Math. \textbf{62} (1981), no. 3, 481-502,
+	\url{http://www.springerlink.com/content/k625300v27x258g8/}.
+
+\bibitem{klages-mundt12}
+	Ariah Klages-Mundt,
+	\emph{A Database of Elliptic Curves over Complex Cubic Fields}, 2012
+	\url{https://www.amherst.edu/users/K/aklagesmundt12}.
+
+\bibitem{kubert76}
+	Daniel Sion Kubert,
+	\emph{Universal bounds on the torsion of elliptic curves},
+	Proceedings of the London Mathematical Society \textbf{s3-33} (1976), no. 2, 193-237,
+	\url{http://plms.oxfordjournals.org/content/s3-33/2/193.full.pdf}.
+
+\bibitem{najman12}
+	Filip Najman,
+	\emph{Torsion of elliptic curves over cubic fields},
+	J. Number Theory \textbf{132} (2012), 26-36,
+	\url{http://arxiv.org/abs/1108.3709}.
+
+\bibitem{ohana12}
+	R.\thinspace{}Andrew Ohana,
+	``Canonical Models'',
+	E-mails to Ariah Klages-Mundt,
+	March 12 - March 30 2012.
+
+\bibitem{silverman92}
+	J.\thinspace{}H. Silverman,
+	\emph{The Arithmetic of Elliptic Curves},
+	Springer-Verlag, New York,
+	Corrected reprint of the 1986 original, 1992
+	\url{http://www.springer.com/mathematics/algebra/book/978-0-387-09493-9}.
+
+\bibitem{sage12}
+	William Stein et al.,
+	\emph{Sage Mathematics Software (Version 4.8)},
+	The Sage Development Team, 2012,
+	\url{http://www.sagemath.org}.
+
+\end{thebibliography}
+
+
+
+\end{document}
